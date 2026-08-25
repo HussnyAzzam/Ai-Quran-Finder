@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Chat with MCP Memory</title>
+    <style>
+        body { font-family: sans-serif; background: #121214; color: #e1e1e6; display: flex; justify-content: center; height: 100vh; margin: 0; align-items: center; }
+        #chat-container { width: 450px; background: #202024; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; height: 600px; border: 1px solid #323238; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .message { padding: 10px 14px; border-radius: 8px; max-width: 80%; line-height: 1.4; font-size: 15px; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
+        .user { background: #8257e5; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .bot { background: #29292e; color: #e1e1e6; align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid #323238; }
+        #input-container { display: flex; border-top: 1px solid #323238; padding: 12px; background: #121214; }
+        input { flex: 1; padding: 12px; background: #202024; border: 1px solid #323238; border-radius: 6px; color: white; outline: none; }
+        button { padding: 0 20px; background: #8257e5; color: white; border: none; border-radius: 6px; margin-left: 8px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-box">
+            <div class="message bot">السلام عليكم, كيف يمككني مساعدتك اليوم في تعلم القران والتفسير والحديث؟</div>
+        </div>
+        <div id="input-container">
+            <input type="text" id="user-input" placeholder="اكتب رسالة..." onkeypress="if(event.key==='Enter')sendMessage()">
+            <button onclick="sendMessage()">إرسال</button>
+        </div>
+    </div>
+    <script>
+        // Track individual chat context sessions natively
+        const currentSessionId = "session-" + Math.random().toString(36).substring(2, 11);
+
+        // Safely create a message bubble using textContent (handles long text,
+        // Arabic, special characters like < > & without breaking the HTML)
+        function addMessage(text, isUser = false, isError = false) {
+            const box = document.getElementById("chat-box");
+            const div = document.createElement("div");
+            div.className = "message " + (isUser ? "user" : "bot");
+            if (isError) div.style.color = "#ff6b6b";
+            div.textContent = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+            return div;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById("user-input");
+            const box = document.getElementById("chat-box");
+            const text = input.value.trim();
+            if (!text) return;
+
+            addMessage(text, true);
+            input.value = "";
+
+            const typingDiv = addMessage("Thinking...");
+
+            try {
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: text, sessionId: currentSessionId })
+                });
+
+                let data;
+                try {
+                    data = await res.json();
+                } catch (parseErr) {
+                    data = { error: "Server returned an invalid response. Please retry." };
+                }
+
+                typingDiv.remove();
+
+                if (data.error) {
+                    addMessage(String(data.error), false, true);
+                } else if (data.reply && String(data.reply).trim()) {
+                    addMessage(String(data.reply));
+                } else {
+                    addMessage("Empty reply received. Please retry.", false, true);
+                }
+            } catch (err) {
+                typingDiv.remove();
+                addMessage("Network connection failure.", false, true);
+            }
+            box.scrollTop = box.scrollHeight;
+        }
+    </script>
+</body>
+</html>
